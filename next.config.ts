@@ -1,10 +1,14 @@
 import { withPayload } from '@payloadcms/next/withPayload'
 import type { NextConfig } from 'next'
+import { existsSync } from 'node:fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(__filename)
+const payloadRouteGroup = path.join(dirname, 'src', 'app', '(payload)')
+const missingAdminStylesheet = !existsSync(path.join(payloadRouteGroup, 'custom.css'))
+const adminStylesheetFallback = './src/lib/payload-admin-fallback.css'
 
 const makePublicPreviewURL = (() => {
   const publicURL = process.env.FIGMA_PUBLIC_URL
@@ -18,17 +22,32 @@ const makePublicPreviewURL = (() => {
 })()
 
 const nextConfig: NextConfig = {
-  webpack: (webpackConfig) => {
+  // Keep the repository's Make instructions intact during local development.
+  agentRules: false,
+  webpack: (webpackConfig, { webpack }) => {
     webpackConfig.resolve.extensionAlias = {
       '.cjs': ['.cts', '.cjs'],
       '.js': ['.ts', '.tsx', '.js', '.jsx'],
       '.mjs': ['.mts', '.mjs'],
+    }
+    if (missingAdminStylesheet) {
+      webpackConfig.plugins.push(new webpack.NormalModuleReplacementPlugin(
+        /^\.\/custom\.css$/,
+        (resource: { context?: string; request: string }) => {
+          if (resource.context === payloadRouteGroup) {
+            resource.request = path.join(dirname, adminStylesheetFallback)
+          }
+        },
+      ))
     }
 
     return webpackConfig
   },
   turbopack: {
     root: path.resolve(dirname),
+    ...(missingAdminStylesheet && {
+      resolveAlias: { './custom.css': adminStylesheetFallback },
+    }),
   },
   output: 'standalone',
   images: {

@@ -1,10 +1,9 @@
 import type { CollectionConfig } from 'payload'
 import { revalidateTag } from 'next/cache'
 
-const refreshEvents: NonNullable<CollectionConfig['hooks']>['afterChange'][number] = ({
-  doc,
-  previousDoc,
-}) => {
+const refreshEvents: NonNullable<
+  NonNullable<CollectionConfig['hooks']>['afterChange']
+>[number] = ({ doc, previousDoc }) => {
   revalidateTag('events', 'max')
   if (previousDoc?.slug) revalidateTag(`event:${previousDoc.slug}`, 'max')
   if (doc.slug) revalidateTag(`event:${doc.slug}`, 'max')

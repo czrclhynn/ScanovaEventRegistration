@@ -1,31 +1,11 @@
 'use client'
 
-import { FormEvent, useMemo, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from 'react'
+import { scanova } from '@/lib/scanova/client'
+import { dateLabel, eventTimeLabel, type RegistrationTicket, type ScanovaEvent } from '@/lib/scanova/types'
+import { StaffArea } from './ScanovaOperations'
 
 type Screen = 'home' | 'register' | 'ticket' | 'email' | 'scanner' | 'dashboard' | 'flow' | 'system'
-type ScanResult = 'success' | 'duplicate' | 'invalid' | null
-
-const event = {
-  title: 'Build Over Nights: Cloud & AI Seminar 2026',
-  date: 'December 12, 2026',
-  time: '9:00 AM – 5:00 PM',
-  venue: 'Function Hall A, SMX Convention Center',
-  organizer: 'AWS User Group Philippines',
-}
-
-const attendees = [
-  ['8:14 AM', 'Maria Reyes', 'maria.reyes@email.com', 'Ateneo de Manila University', '+63 917 842 1093', 'SCN-2026-00482', 'Checked In', '9:06 AM'],
-  ['8:18 AM', 'Paolo Mendoza', 'paolo.m@cloudstaff.ph', 'Cloudstaff Philippines', '+63 918 225 3401', 'SCN-2026-00483', 'Checked In', '9:12 AM'],
-  ['8:24 AM', 'Angela Santos', 'angela.santos@dlsu.edu.ph', 'De La Salle University', '+63 917 644 2880', 'SCN-2026-00484', 'Pending', '—'],
-  ['8:37 AM', 'Carlo Villanueva', 'carlo@kalibrr.com', 'Kalibrr', '+63 905 413 7670', 'SCN-2026-00485', 'Checked In', '9:18 AM'],
-  ['8:42 AM', 'Sofia Garcia', 'sofia.garcia@up.edu.ph', 'UP Diliman', '+63 917 301 5914', 'SCN-2026-00486', 'Pending', '—'],
-  ['8:51 AM', 'Miguel Bautista', 'miguel@paymongo.com', 'PayMongo', '+63 927 518 2038', 'SCN-2026-00487', 'Checked In', '9:25 AM'],
-  ['9:03 AM', 'Nicole Ramos', 'nicole.ramos@ust.edu.ph', 'University of Santo Tomas', '+63 917 690 4432', 'SCN-2026-00488', 'Pending', '—'],
-  ['9:12 AM', 'Joshua Cruz', 'jcruz@globe.com.ph', 'Globe Telecom', '+63 998 477 1265', 'SCN-2026-00489', 'Checked In', '9:31 AM'],
-  ['9:26 AM', 'Bea Navarro', 'bea@thinkingmachin.es', 'Thinking Machines', '+63 917 280 9481', 'SCN-2026-00490', 'Pending', '—'],
-  ['9:41 AM', 'Luis Fernandez', 'luis.fernandez@mapua.edu.ph', 'Mapúa University', '+63 905 736 2210', 'SCN-2026-00491', 'Pending', '—'],
-]
-
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, ReactElement> = {
     arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
@@ -95,7 +75,7 @@ function Header({ screen, go }: { screen: Screen; go: (s: Screen) => void }) {
       <button className={screen === 'dashboard' ? 'active' : ''} onClick={() => go('dashboard')}>Attendees</button>
     </nav>
     <div className="header-actions">
-      <a className="manage-link" href="/admin/collections/events">Manage events</a>
+      <a className="manage-link" href="/?staff=events">Manage events</a>
       <button className="nav-cta" onClick={() => go('register')}>Register now</button>
     </div>
     <button className="menu-button" onClick={() => setOpen(!open)} aria-label="Toggle navigation"><Icon name={open ? 'x' : 'menu'}/></button>
@@ -106,22 +86,22 @@ function Shell({ screen, go, children, bare = false }: { screen: Screen; go: (s:
   return <div className="app-shell"><Ambient/>{!bare && <Header screen={screen} go={go}/>}<main id="main-content">{children}</main></div>
 }
 
-function Landing({ go }: { go: (s: Screen) => void }) {
+function Landing({ go, event }: { go: (s: Screen) => void; event?: ScanovaEvent }) {
   return <div className="landing">
     <section className="hero section">
       <HeroMark/>
       <div className="hero-copy">
         <h1>Your next big idea<br/>starts with <em>one scan.</em></h1>
-        <p>Register once, receive your QR ticket, and walk into Build Over Nights with a single scan. No accounts. No hassle.</p>
+        <p>Register once, receive your QR ticket, and walk into your next event with a single scan. No accounts. No hassle.</p>
         <div className="button-row">
           <button className="primary" onClick={() => go('register')}>Register now</button>
           <a className="secondary" href="/events">See all events</a>
         </div>
         <div className="event-admin-actions">
           <span>Planning another seminar?</span>
-          <a href="/admin/collections/events/create">Create an event</a>
+          <a href="/?staff=events&new=1">Create an event</a>
           <i/>
-          <a href="/admin/collections/events">Manage events</a>
+          <a href="/?staff=events">Manage events</a>
         </div>
       </div>
       <div className="hero-rule"><span>01</span><i/><span>SCANOVA / 2026</span></div>
@@ -133,13 +113,13 @@ function Landing({ go }: { go: (s: Screen) => void }) {
         <h2>From registration<br/>to <em>right this way.</em></h2>
         <p>Every touchpoint designed to keep attendees moving and organizers in control.</p>
       </div>
-      <div className="device-stage">
+      <div className="device-stage" aria-hidden="true">
         <div className="device reg-device glass">
           <div className="device-bar"><Logo compact/><span>Register</span></div>
           <small>YOUR DETAILS</small><h4>Reserve your seat.</h4>
           <label>Full name</label><div className="fake-input">Maria Reyes</div>
-          <label>Email address</label><div className="fake-input">maria.reyes@email.com</div>
-          <button className="mini-primary">Register & get my QR</button>
+          <label>Email address</label><div className="fake-input">attendee@example.invalid</div>
+          <button className="mini-primary" tabIndex={-1}>Register & get my QR</button>
         </div>
         <div className="device ticket-device glass">
           <span className="tag">YOU'RE IN</span><h4>Cloud & AI<br/>Seminar 2026</h4>
@@ -147,7 +127,7 @@ function Landing({ go }: { go: (s: Screen) => void }) {
         </div>
         <div className="device scanner-device">
           <div className="camera-noise"/><div className="viewfinder mini"><i/><i/><i/><i/><span/></div>
-          <p>Align QR code within frame</p><div className="scanner-count">148 <small>/ 212 checked in</small></div>
+          <p>Align QR code within frame</p><div className="scanner-count"><small>Staff check-in</small></div>
         </div>
       </div>
     </section>
@@ -165,13 +145,12 @@ function Landing({ go }: { go: (s: Screen) => void }) {
     </section>
 
     <section className="event-detail section" id="event">
-      <div className="detail-copy"><span className="kicker">The main event</span><h2>One day to build what’s <em>next.</em></h2><p>Join builders, students, and cloud practitioners for a full day of practical sessions, live demos, and meaningful connections.</p><button className="primary" onClick={() => go('register')}>Save my seat</button></div>
+      <div className="detail-copy"><span className="kicker">The main event</span><h2>{event?.name || <>One day to build what’s <em>next.</em></>}</h2><p>{event?.description || "Browse the event catalog to see what’s coming up."}</p><button className="primary" onClick={() => go('register')}>Save my seat</button></div>
       <div className="detail-panel glass">
-        <div className="detail-row"><span><Icon name="calendar"/>Date</span><strong>{event.date}</strong></div>
-        <div className="detail-row"><span><Icon name="clock"/>Time</span><strong>{event.time}</strong></div>
-        <div className="detail-row"><span><Icon name="pin"/>Venue</span><strong>SMX Convention Center<br/><small>Pasay City, Metro Manila</small></strong></div>
-        <div className="detail-row"><span><Icon name="users"/>Organizer</span><strong>{event.organizer}</strong></div>
-        <div className="seats"><div><span>Seats filling up</span><strong>212 <small>/ 300</small></strong></div><div className="progress"><i/></div></div>
+        <div className="detail-row"><span><Icon name="calendar"/>Date</span><strong>{event ? dateLabel(event.date) : 'To be announced'}</strong></div>
+        <div className="detail-row"><span><Icon name="clock"/>Time</span><strong>{event ? eventTimeLabel(event) : 'To be announced'}</strong></div>
+        <div className="detail-row"><span><Icon name="pin"/>Venue</span><strong>{event?.venue || 'To be announced'}</strong></div>
+        {event && <div className="seats"><div><span>Seats reserved</span><strong>{event.confirmed} <small>/ {event.capacity}</small></strong></div><div className="progress"><i style={{ width: (event.confirmed / event.capacity * 100) + '%' }}/></div></div>}
       </div>
     </section>
     <Footer go={go}/>
@@ -182,138 +161,134 @@ function Footer({ go }: { go: (s: Screen) => void }) {
   return <footer><div><Logo/><p>Thoughtful registration. Effortless entry.</p></div><div><span>EXPLORE</span><button onClick={() => go('register')}>Register</button><button onClick={() => go('scanner')}>Staff check-in</button><button onClick={() => go('dashboard')}>Attendee list</button></div><div><span>EVENT SUPPORT</span><a href="mailto:hello@scanova.events">hello@scanova.events</a><p>+63 2 8123 4567</p></div><div className="footer-bottom"><span>© 2026 Scanova</span><span>Made for better arrivals.</span></div></footer>
 }
 
-function Registration({ go }: { go: (s: Screen) => void }) {
+function Registration({ go, events, selected, choose, loadError, confirmed }: {
+  go: (s: Screen) => void
+  events: ScanovaEvent[]
+  selected: string
+  choose: (id: string) => void
+  loadError: string
+  confirmed: (ticket: RegistrationTicket) => void
+}) {
+  const event = events.find(entry => entry.id === selected)
   const [form, setForm] = useState({ name: '', email: '', org: '', phone: '', consent: false })
-  const [errors, setErrors] = useState<Record<string,string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
-  const update = (key: string, value: string | boolean) => setForm(f => ({ ...f, [key]: value }))
-  const submit = (e: FormEvent) => {
+  const busy = useRef(false)
+  const submission = useRef<{ details: string; id: string } | null>(null)
+  const update = (key: keyof typeof form, value: string | boolean) => setForm(f => ({ ...f, [key]: value }))
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const next: Record<string,string> = {}
+    if (busy.current) return
+    const next: Record<string, string> = {}
+    if (!event || event.status !== 'open') next.event = 'Choose an event with open registration.'
     if (form.name.trim().length < 3) next.name = 'Enter your full name.'
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email address.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = 'Enter a valid email address.'
     if (!form.org.trim()) next.org = 'Enter your organization, company, or school.'
-    if (!/^\d{10}$/.test(form.phone.replace(/\D/g,''))) next.phone = 'Enter a valid 10-digit mobile number.'
-    if (!form.consent) next.consent = 'Please confirm to receive your ticket by email.'
+    const localNumber = form.phone.replace(/[ ().-]/g, '')
+    if (!/^9\d{9}$/.test(localNumber)) next.phone = 'Enter your 10-digit Philippine mobile number.'
+    if (!form.consent) next.consent = 'Please confirm how we can use your details.'
     setErrors(next)
-    if (!Object.keys(next).length) { setLoading(true); setTimeout(() => { setLoading(false); go('ticket') }, 850) }
+    if (Object.keys(next).length || !event) return
+
+    const data = { eventId: event.id, name: form.name.trim(), email: form.email.trim().toLowerCase(),
+      organization: form.org.trim(), phone: '+63' + localNumber, consent: form.consent }
+    const details = JSON.stringify(data)
+    if (submission.current?.details !== details) submission.current = { details, id: crypto.randomUUID() }
+    busy.current = true
+    setLoading(true)
+    try {
+      const { ticket } = await scanova<{ ticket: RegistrationTicket }>('registrations', { ...data, requestId: submission.current.id })
+      confirmed(ticket)
+    } catch (error) {
+      setErrors({ form: error instanceof Error ? error.message : 'Registration is temporarily unavailable.' })
+    } finally {
+      busy.current = false
+      setLoading(false)
+    }
   }
   return <div className="registration-page">
     <aside className="registration-aside">
       <button className="back-link" onClick={() => go('home')}>Back to event</button>
-      <div><span className="kicker">December 12, 2026</span><h1>One form.<br/><em>One ticket.</em><br/>You’re in.</h1><p>Join 300 builders for a day of cloud, AI, and ideas worth sharing.</p></div>
-      <div className="aside-event glass"><div><Icon name="calendar"/><span>{event.date}<small>{event.time}</small></span></div><div><Icon name="pin"/><span>SMX Convention Center<small>Pasay City, Metro Manila</small></span></div></div>
+      <div><span className="kicker">{event ? dateLabel(event.date) : 'Event registration'}</span><h1>One form.<br/><em>One ticket.</em><br/>You’re in.</h1><p>{event ? event.name : "Choose an event to reserve your place."}</p></div>
+      <div className="aside-event glass"><div><Icon name="calendar"/><span>{event ? dateLabel(event.date) : 'Date to be announced'}<small>{event && eventTimeLabel(event)}</small></span></div><div><Icon name="pin"/><span>{event?.venue || 'Venue to be announced'}</span></div></div>
     </aside>
     <section className="form-side">
       <div className="mobile-logo"><Logo/></div>
       <form className="registration-form glass" onSubmit={submit} noValidate>
         <span className="form-step">REGISTRATION · 01 / 01</span><h2>Reserve your seat.</h2><p>We’ll send your unique QR ticket to your email.</p>
-        {[
+        <label className={errors.event ? 'field error' : 'field'}><span>Event</span>
+          <select required value={selected} onChange={e => choose(e.target.value)} disabled={loading}>
+            <option value="">Choose an event</option>
+            {events.map(entry => <option key={entry.id} value={entry.id}>{entry.name}{entry.status !== 'open' ? ' · Registration closed' : ' · ' + entry.available + ' seats left'}</option>)}
+          </select>{errors.event && <small>{errors.event}</small>}
+        </label>
+        {([
           ['name','Full name','Maria Reyes','text'],
-          ['email','Email address','maria.reyes@email.com','email'],
+          ['email','Email address','attendee@example.com','email'],
           ['org','Organization / Company / School','Ateneo de Manila University','text'],
-        ].map(([key,label,placeholder,type]) => <label className={errors[key] ? 'field error' : 'field'} key={key}><span>{label}</span><input type={type} value={(form as any)[key]} placeholder={placeholder} onChange={e => update(key,e.target.value)}/>{errors[key] && <small>{errors[key]}</small>}</label>)}
+        ] as const).map(([key,label,placeholder,type]) => <label className={errors[key] ? 'field error' : 'field'} key={key}><span>{label}</span><input type={type} value={form[key]} maxLength={key === 'email' ? 254 : key === 'name' ? 150 : 160} placeholder={placeholder} onChange={e => update(key,e.target.value)}/>{errors[key] && <small>{errors[key]}</small>}</label>)}
         <label className={errors.phone ? 'field error' : 'field'}><span>Contact number</span><div className="phone-field"><b>+63</b><input inputMode="numeric" value={form.phone} placeholder="917 123 4567" onChange={e => update('phone',e.target.value)}/></div>{errors.phone && <small>{errors.phone}</small>}</label>
-        <label className="check-field"><input type="checkbox" checked={form.consent} onChange={e => update('consent',e.target.checked)}/><i><Icon name="check" size={13}/></i><span>I agree to receive my ticket and event updates by email.</span></label>
+        <label className="check-field"><input type="checkbox" checked={form.consent} onChange={e => update('consent',e.target.checked)}/><i><Icon name="check" size={13}/></i><span>I agree to the use of my details for event registration, ticket delivery, and attendance.</span></label>
         {errors.consent && <small className="consent-error">{errors.consent}</small>}
-        <button className="primary submit" disabled={loading}>{loading ? <><span className="spinner"/> Creating your ticket…</> : <>Register & get my QR</>}</button>
-        <p className="privacy">Your details are only used for this event. No account will be created.</p>
+        {(errors.form || loadError) && <p className="consent-error" role="alert">{errors.form || loadError}</p>}
+        <button className="primary submit" disabled={loading || !event || event.status !== 'open'}>{loading ? <><span className="spinner"/> Creating your ticket…</> : <>Register & get my QR</>}</button>
+        <p className="privacy">The event organizer and authorized staff use your details to manage registration and attendance. Your name, email, and ticket are shared with the email delivery service.</p>
       </form>
     </section>
   </div>
 }
 
-function Ticket({ go, notify }: { go: (s: Screen) => void; notify: (s: string) => void }) {
-  const download = () => {
-    const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800
-    const c = canvas.getContext('2d')!; c.fillStyle = '#fff'; c.fillRect(0,0,800,800); c.fillStyle = '#10182D'
-    for(let y=0;y<25;y++) for(let x=0;x<25;x++) if ((x*y+x*3+y*7)%5<2) c.fillRect(80+x*25,80+y*25,22,22)
-    const a=document.createElement('a'); a.download='scanova-ticket-SCN-2026-00482.png'; a.href=canvas.toDataURL(); a.click(); notify('QR ticket downloaded')
-  }
-  const calendar = () => {
-    const data='BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART:20261212T010000Z\nDTEND:20261212T090000Z\nSUMMARY:Build Over Nights: Cloud & AI Seminar 2026\nLOCATION:SMX Convention Center, Pasay City\nEND:VEVENT\nEND:VCALENDAR'
-    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type:'text/calendar'})); a.download='build-over-nights.ics'; a.click(); notify('Calendar file ready')
-  }
+function downloadFile(href: string, filename: string) {
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.download = filename
+  anchor.click()
+}
+
+function addCalendar(event: ScanovaEvent) {
+  const escape = (value: string) => value.replaceAll('\\', '\\\\').replace(/\r?\n/g, '\\n').replace(/[,;]/g, '\\$&')
+  const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '')
+  const time = (value: string) => new Date(event.date + 'T' + value.slice(0, 5) + ':00+08:00')
+    .toISOString().replace(/[-:]|\.\d{3}/g, '')
+  const data = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scanova//Event Registration//EN', 'BEGIN:VEVENT',
+    'UID:' + event.id + '@scanova', 'DTSTAMP:' + stamp, 'DTSTART:' + time(event.start), 'DTEND:' + time(event.end),
+    'SUMMARY:' + escape(event.name), 'LOCATION:' + escape(event.venue), 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n')
+  const url = URL.createObjectURL(new Blob([data], { type: 'text/calendar;charset=utf-8' }))
+  downloadFile(url, 'scanova-event.ics')
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function Ticket({ go, notify, ticket }: { go: (s: Screen) => void; notify: (s: string) => void; ticket: RegistrationTicket }) {
+  const { event } = ticket
   return <div className="success-page page-wrap">
-    <div className="success-heading"><div className="success-icon"><Icon name="check" size={28}/></div><span className="kicker">Registration complete</span><h1>You’re registered!</h1><p>We sent your QR ticket to <strong>maria.reyes@email.com</strong></p></div>
+    <div className="success-heading"><div className="success-icon"><Icon name="check" size={28}/></div><span className="kicker">Registration complete</span><h1>You’re registered!</h1><p>Your seat is confirmed. Your confirmation email is queued for <strong>{ticket.email}</strong>.</p></div>
     <div className="ticket-layout">
       <article className="digital-ticket">
         <div className="ticket-head"><Logo/><span>ADMIT ONE</span></div>
         <div className="ticket-body">
-          <span className="kicker">BUILD OVER NIGHTS</span><h2>Cloud & AI<br/>Seminar 2026</h2>
-          <div className="ticket-details"><div><small>ATTENDEE</small><strong>Maria Reyes</strong></div><div><small>ORGANIZATION</small><strong>Ateneo de Manila University</strong></div><div><small>DATE</small><strong>Dec 12, 2026</strong></div><div><small>TIME</small><strong>9:00 AM – 5:00 PM</strong></div><div className="wide"><small>VENUE</small><strong>Function Hall A, SMX Convention Center</strong></div></div>
+          <h2>{event.name}</h2>
+          <div className="ticket-details"><div><small>ATTENDEE</small><strong>{ticket.name}</strong></div><div><small>ORGANIZATION</small><strong>{ticket.organization}</strong></div><div><small>DATE</small><strong>{dateLabel(event.date)}</strong></div><div><small>TIME</small><strong>{eventTimeLabel(event)}</strong></div><div className="wide"><small>VENUE</small><strong>{event.venue}</strong></div></div>
         </div>
         <div className="perforation"><i/><span/><i/></div>
-        <div className="ticket-qr"><div><QR/><small>SCAN AT ENTRANCE</small></div><div><small>TICKET ID</small><strong>SCN-2026-00482</strong><p>Keep this code visible and ready when you arrive.</p></div></div>
+        <div className="ticket-qr"><div><img src={ticket.qr} width={132} height={132} alt="Your private check-in QR code"/><small>SCAN AT ENTRANCE</small></div><div className="min-w-0"><small>TICKET ID</small><strong className="break-all">{ticket.ticketId}</strong><p>Keep this code visible and ready when you arrive.</p></div></div>
       </article>
-      <aside className="ticket-actions glass"><h3>Your ticket is ready.</h3><p>Please present this QR at the entrance. You can use the email, download the image, or add the event to your calendar.</p><button className="primary" onClick={download}><Icon name="download"/> Download QR (PNG)</button><button className="secondary" onClick={calendar}><Icon name="calendar"/> Add to calendar</button><button className="text-button" onClick={() => notify('Email resend simulated — no email was sent')}><Icon name="mail"/> Resend email</button><button className="email-preview-link" onClick={() => go('email')}>Preview confirmation email</button></aside>
+      <aside className="ticket-actions glass"><h3>Your ticket is ready.</h3><p>Present this QR at the entrance. Save the image or add the event to your calendar.</p><button className="primary" onClick={() => { downloadFile(ticket.qr, 'scanova-ticket.png'); notify('QR ticket downloaded') }}><Icon name="download"/> Download QR (PNG)</button><button className="secondary" onClick={() => { addCalendar(event); notify('Calendar file ready') }}><Icon name="calendar"/> Add to calendar</button><button className="email-preview-link" onClick={() => go('email')}>Preview confirmation email</button></aside>
     </div>
     <button className="back-home" onClick={() => go('home')}>Return to event page</button>
   </div>
 }
 
-function EmailPreview({ go }: { go: (s: Screen) => void }) {
-  return <div className="email-page page-wrap"><div className="page-heading"><span className="kicker">Messaging preview</span><h1>Your ticket, delivered.</h1><p>A responsive confirmation email designed for desktop and mobile inboxes.</p></div>
+function EmailPreview({ go, ticket }: { go: (s: Screen) => void; ticket: RegistrationTicket }) {
+  const { event } = ticket
+  const subject = 'Your Scanova ticket for ' + event.name
+  const content = <div className="email-body"><div className="email-brand"><Logo/></div><div className="email-content"><span>YOU’RE REGISTERED</span><h2>Hi {ticket.name}, your seat is saved.</h2><p>We’re excited to see you at {event.name}. Present this code at the entrance.</p><div className="email-qr"><img src={ticket.qr} width={108} height={108} alt="Check-in QR code"/><strong className="break-all">{ticket.ticketId}</strong></div><p>{dateLabel(event.date)}<br/>{eventTimeLabel(event)}<br/>{event.venue}</p><button onClick={() => addCalendar(event)}>Add to calendar</button></div></div>
+  return <div className="email-page page-wrap"><div className="page-heading"><span className="kicker">Messaging preview</span><h1>Your confirmation email.</h1></div>
     <div className="mail-showcase">
-      <div className="mail-window glass"><div className="mail-chrome"><i/><i/><i/><span>Inbox / Scanova ticket</span></div><div className="mail-meta"><strong>Your Scanova ticket for Build Over Nights: Cloud & AI Seminar 2026</strong><span>Scanova Events &lt;hello@scanova.events&gt;</span></div><EmailBody/></div>
-      <div className="phone-mail"><div className="phone-notch"/><div className="mobile-mail-bar">‹ Inbox <span>•••</span></div><div className="mobile-subject">Your Scanova ticket for Build Over Nights…</div><EmailBody/></div>
+      <div className="mail-window glass"><div className="mail-chrome"><i/><i/><i/><span>Inbox / Scanova ticket</span></div><div className="mail-meta"><strong>{subject}</strong></div>{content}</div>
+      <div className="phone-mail"><div className="phone-notch"/><div className="mobile-mail-bar">‹ Inbox <span>•••</span></div><div className="mobile-subject">{subject}</div>{content}</div>
     </div>
     <button className="secondary return-button" onClick={() => go('ticket')}>Back to ticket</button>
   </div>
-}
-
-function EmailBody() {
-  return <div className="email-body"><div className="email-brand"><Logo/></div><div className="email-content"><span>YOU’RE REGISTERED</span><h2>Hi Maria, your seat<br/>is officially saved.</h2><p>We’re excited to see you at Build Over Nights: Cloud & AI Seminar 2026. Present the QR code below at the entrance.</p><div className="email-qr"><QR small/><strong>SCN-2026-00482</strong></div><div className="email-info"><div><b>DEC</b><strong>12</strong></div><p><strong>Saturday, December 12, 2026</strong><br/>9:00 AM – 5:00 PM<br/>SMX Convention Center, Pasay City</p></div><button>Add to calendar</button><small>Need help? Contact hello@scanova.events</small></div></div>
-}
-
-function Scanner({ go, checked, setChecked }: { go: (s: Screen) => void; checked: number; setChecked: (n: number) => void }) {
-  const [started, setStarted] = useState(false)
-  const [result, setResult] = useState<ScanResult>(null)
-  const [manual, setManual] = useState(false)
-  const [torch, setTorch] = useState(false)
-  const showResult = (r: ScanResult) => { setResult(r); if(r === 'success') setChecked(checked + 1) }
-  if (!started) return <div className="scanner-entry"><Ambient/><button className="scanner-exit" onClick={() => go('home')}>Exit staff mode</button><div className="entry-card glass"><Logo/><div className="scanner-icon"><Icon name="scan" size={34}/></div><span className="kicker">Event operations</span><h1>Staff Check-in<br/>Mode</h1><p>{event.title}</p><div className="entry-meta"><span><Icon name="calendar"/>{event.date}</span><span><Icon name="pin"/>SMX Convention Center</span></div><button className="primary" onClick={() => setStarted(true)}>Start scanning</button><small>No login required · Front-end simulation</small></div></div>
-  return <div className="live-scanner">
-    <div className="camera-noise"/><div className={torch ? 'torch-glow on' : 'torch-glow'}/>
-    <div className="scanner-top"><button onClick={() => setStarted(false)}><Icon name="x"/></button><div><Logo compact/><span>Staff check-in</span></div><span className="live-dot">LIVE</span></div>
-    <div className="scan-copy"><h2>Scan attendee ticket</h2><p>Align the QR code within the frame.</p></div>
-    <button className="scan-target" onClick={() => showResult('success')} aria-label="Simulate valid scan"><div className="viewfinder"><i/><i/><i/><i/><span/></div></button>
-    <div className="scanner-controls"><button className={torch ? 'on' : ''} onClick={() => setTorch(!torch)}><Icon name="torch"/><span>Torch</span></button><div className="check-counter"><strong>{checked}</strong><span>of 212<br/>checked in</span></div><button onClick={() => setManual(true)}><Icon name="search"/><span>Manual search</span></button></div>
-    <div className="simulation-switch"><span>Simulate result:</span><button onClick={() => showResult('success')}>Valid</button><button onClick={() => showResult('duplicate')}>Duplicate</button><button onClick={() => showResult('invalid')}>Invalid</button></div>
-    {manual && <ManualSearch close={() => setManual(false)} checkin={() => { setChecked(checked + 1); setManual(false); setResult('success') }}/>}
-    {result && <ScanSheet result={result} close={() => setResult(null)} manual={() => {setResult(null);setManual(true)}}/>}
-  </div>
-}
-
-function ScanSheet({ result, close, manual }: { result: Exclude<ScanResult,null>; close: () => void; manual: () => void }) {
-  const data = result === 'success'
-    ? { title: 'Checked In', icon: 'check', sub: 'Entry confirmed at 9:42 AM', person: true }
-    : result === 'duplicate'
-    ? { title: 'Already Checked In', icon: 'clock', sub: 'Previous check-in at 9:06 AM', person: true }
-    : { title: 'Ticket Not Found', icon: 'x', sub: 'This QR code isn’t linked to this event.', person: false }
-  return <div className={`result-overlay ${result}`}><div className="result-sheet"><div className="result-symbol"><Icon name={data.icon} size={34}/></div><span className="result-label">{result === 'success' ? 'ENTRY CONFIRMED' : result === 'duplicate' ? 'DUPLICATE SCAN' : 'INVALID QR'}</span><h2>{data.title}</h2><p>{data.sub}</p>{data.person && <div className="person-card"><div>MR</div><span><strong>Maria Reyes</strong><small>Ateneo de Manila University</small><small>SCN-2026-00482</small></span></div>}<button className="result-primary" onClick={close}>{result === 'success' ? 'Scan next' : result === 'duplicate' ? 'Back to scanner' : 'Try again'}</button>{result === 'invalid' && <button className="result-secondary" onClick={manual}>Search manually</button>}</div></div>
-}
-
-function ManualSearch({ close, checkin }: { close: () => void; checkin: () => void }) {
-  const [query, setQuery] = useState('')
-  return <div className="manual-overlay"><div className="manual-sheet"><div className="sheet-handle"/><div className="manual-head"><div><span className="kicker">Fallback check-in</span><h2>Find an attendee</h2></div><button onClick={close}><Icon name="x"/></button></div><label className="search-box"><Icon name="search"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Name, email, or ticket ID"/></label><p className="search-hint">{query ? '1 matching attendee' : 'Recent registrations'}</p><div className="search-result"><div className="avatar">MR</div><div><strong>Maria Reyes</strong><span>maria.reyes@email.com</span><small>SCN-2026-00482 · Pending</small></div><button onClick={checkin}>Check in</button></div><div className="search-result"><div className="avatar">AS</div><div><strong>Angela Santos</strong><span>angela.santos@dlsu.edu.ph</span><small>SCN-2026-00484 · Pending</small></div><button onClick={checkin}>Check in</button></div></div></div>
-}
-
-function Dashboard({ go, checked, notify }: { go: (s: Screen) => void; checked: number; notify: (s:string)=>void }) {
-  const [filter, setFilter] = useState('All')
-  const [search, setSearch] = useState('')
-  const rows = attendees.filter(a => (filter === 'All' || a[6] === filter) && a.join(' ').toLowerCase().includes(search.toLowerCase()))
-  const exportCsv = () => { const csv=['Timestamp,Full Name,Email,Organization,Contact,Ticket ID,Status,Check-in Time',...attendees.map(a=>a.map(x=>`"${x}"`).join(','))].join('\n'); const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='scanova-attendees.csv';a.click();notify('Attendee CSV exported') }
-  return <div className="dashboard-page"><aside className="dash-sidebar"><Logo compact/><div><button className="active"><Icon name="users"/><span>Attendees</span></button><button onClick={() => go('scanner')}><Icon name="scan"/><span>Scanner</span></button><button onClick={() => go('flow')}><Icon name="database"/><span>System flow</span></button><button onClick={() => go('system')}><Icon name="spark"/><span>Components</span></button></div><button onClick={() => go('home')}><span>Event site</span></button></aside>
-    <div className="dashboard-main"><header><div><span className="kicker">Build Over Nights · 2026</span><h1>Attendee List</h1><p>Registration, ticket delivery, and event check-in status.</p></div><button className="secondary" onClick={exportCsv}><Icon name="download"/> Export CSV</button></header>
-      <div className="stat-grid"><Stat label="Total registered" value="212" change="+18 today" icon="users"/><Stat label="Emails sent" value="209" change="98.6% delivered" icon="mail"/><Stat label="Checked in" value={String(checked)} change="70% arrival rate" icon="check" accent/><Stat label="Remaining" value={String(212-checked)} change="of registered guests" icon="clock"/></div>
-      <div className="table-card glass"><div className="table-tools"><label><Icon name="search"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search attendees"/></label><div className="filters">{['All','Checked In','Pending'].map(f=><button className={filter===f?'active':''} onClick={()=>setFilter(f)} key={f}>{f}{f==='All'&&<span>212</span>}</button>)}</div><span>Showing {rows.length} records</span></div>
-      <div className="table-scroll"><table><thead><tr>{['Timestamp','Full name','Email','Organization','Contact number','Ticket ID','QR status','Email','Check-in','Time'].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((a,i)=><tr key={a[5]}><td>{a[0]}</td><td><strong>{a[1]}</strong></td><td>{a[2]}</td><td>{a[3]}</td><td>{a[4]}</td><td><code>{a[5]}</code></td><td><span className="badge sent">Generated</span></td><td><span className="badge sent">{i===8?'Failed':'Sent'}</span></td><td><span className={`badge ${a[6]==='Checked In'?'checked':'pending'}`}>{a[6]}</span></td><td>{a[7]}</td></tr>)}</tbody></table></div><div className="pagination"><span>1–10 of 212</span><div><button disabled>Prev</button><button className="active">1</button><button>2</button><button>3</button><button>…</button><button>22</button><button>Next</button></div></div></div>
-    </div></div>
-}
-
-function Stat({label,value,change,icon,accent=false}:{label:string,value:string,change:string,icon:string,accent?:boolean}) {
-  return <div className={`stat-card glass ${accent?'accent':''}`}><div className="stat-icon"><Icon name={icon}/></div><span>{label}</span><strong>{value}</strong><small>{change}</small></div>
 }
 
 function SystemFlow({ go }: { go:(s:Screen)=>void }) {
@@ -326,7 +301,7 @@ function SystemFlow({ go }: { go:(s:Screen)=>void }) {
     ['Event Day','scan','On-site scanner','Staff validates ticket'],
     ['Event Day','check','Database update','Status marked checked in'],
   ]
-  return <div className="flow-page page-wrap"><button className="back-link" onClick={()=>go('dashboard')}>Back to dashboard</button><div className="page-heading"><span className="kicker">System architecture</span><h1>One connected flow.<br/><em>Seven clear moments.</em></h1><p>From the first form field to the final check-in, every transition is traceable.</p></div><div className="flow-stage glass"><div className="stage-labels"><span>01 · FRONTEND</span><span>02 · BACKEND / AUTOMATION</span><span>03 · MESSAGING</span><span>04 · EVENT DAY</span></div><div className="flow-nodes">{nodes.map((n,i)=><div className="flow-item" key={n[2]}><article><span className="node-num">{String(i+1).padStart(2,'0')}</span><div className="icon-box"><Icon name={n[1]}/></div><small>{n[0]}</small><h3>{n[2]}</h3><p>{n[3]}</p></article>{i<nodes.length-1&&<div className="connector"><i/><Icon name="arrow" size={15}/></div>}</div>)}</div><div className="flow-note"><Icon name="spark"/><span><strong>Designed for integration</strong> The prototype simulates each handoff and is structured for future API, email, camera, and database connections.</span></div></div></div>
+  return <div className="flow-page page-wrap"><button className="back-link" onClick={()=>go('dashboard')}>Back to dashboard</button><div className="page-heading"><span className="kicker">System architecture</span><h1>One connected flow.<br/><em>Seven clear moments.</em></h1><p>From the first form field to the final check-in, every transition is traceable.</p></div><div className="flow-stage glass"><div className="stage-labels"><span>01 · FRONTEND</span><span>02 · BACKEND / AUTOMATION</span><span>03 · MESSAGING</span><span>04 · EVENT DAY</span></div><div className="flow-nodes">{nodes.map((n,i)=><div className="flow-item" key={n[2]}><article><span className="node-num">{String(i+1).padStart(2,'0')}</span><div className="icon-box"><Icon name={n[1]}/></div><small>{n[0]}</small><h3>{n[2]}</h3><p>{n[3]}</p></article>{i<nodes.length-1&&<div className="connector"><i/><Icon name="arrow" size={15}/></div>}</div>)}</div><div className="flow-note"><Icon name="spark"/><span><strong>Designed for integration</strong> Supabase stores confirmations and attendance. n8n sends the confirmation email after ticket issuance.</span></div></div></div>
 }
 
 function DesignSystem({ go }: { go:(s:Screen)=>void }) {
@@ -340,20 +315,49 @@ function DesignSystem({ go }: { go:(s:Screen)=>void }) {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
-  const [checked, setChecked] = useState(148)
+  const [events, setEvents] = useState<ScanovaEvent[]>([])
+  const [selected, setSelected] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [ticket, setTicket] = useState<RegistrationTicket>()
   const [toast, setToast] = useState('')
-  const go = (next: Screen) => { setScreen(next); window.scrollTo({top:0,behavior:'smooth'}) }
-  const notify = (text:string) => { setToast(text); setTimeout(()=>setToast(''),2800) }
-  const bare = ['register','ticket','email','scanner','dashboard','flow','system'].includes(screen)
-  return <Shell screen={screen} go={go} bare={bare}>
-    {screen === 'home' && <Landing go={go}/>}
-    {screen === 'register' && <Registration go={go}/>}
-    {screen === 'ticket' && <Ticket go={go} notify={notify}/>}
-    {screen === 'email' && <EmailPreview go={go}/>}
-    {screen === 'scanner' && <Scanner go={go} checked={checked} setChecked={setChecked}/>}
-    {screen === 'dashboard' && <Dashboard go={go} checked={checked} notify={notify}/>}
+  const [newEvent, setNewEvent] = useState(false)
+  const go = (next: Screen) => {
+    setScreen(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    if (query.has('staff')) {
+      setScreen('dashboard')
+      setNewEvent(query.has('new'))
+    } else if (query.has('event')) setScreen('register')
+    const controller = new AbortController()
+    scanova<{ events: ScanovaEvent[] }>('events', undefined, controller.signal)
+      .then(({ events: rows }) => {
+        setEvents(rows)
+        setSelected(rows.find(event => event.id === query.get('event'))?.id || rows.find(event => event.status === 'open')?.id || '')
+      })
+      .catch(error => { if (!controller.signal.aborted) setLoadError(error.message) })
+    return () => controller.abort()
+  }, [])
+  const notify = (message: string) => {
+    setToast(message)
+    setTimeout(() => setToast(current => current === message ? '' : current), 2800)
+  }
+  const confirmed = (result: RegistrationTicket) => {
+    setTicket(result)
+    setEvents(rows => rows.map(row => row.id === result.event.id ? result.event : row))
+    go('ticket')
+  }
+  const staff = screen === 'scanner' || screen === 'dashboard'
+  return <Shell screen={screen} go={go} bare={screen !== 'home'}>
+    {screen === 'home' && <Landing go={go} event={events.find(event => event.status === 'open') || events[0]}/>}
+    {screen === 'register' && <Registration go={go} events={events} selected={selected} choose={setSelected} loadError={loadError} confirmed={confirmed}/>}
+    {screen === 'ticket' && ticket && <Ticket go={go} ticket={ticket} notify={notify}/>}
+    {screen === 'email' && ticket && <EmailPreview go={go} ticket={ticket}/>}
+    {staff && <StaffArea mode={screen} openEditor={newEvent} go={go} notify={notify} Icon={Icon} Logo={Logo}/>}
     {screen === 'flow' && <SystemFlow go={go}/>}
     {screen === 'system' && <DesignSystem go={go}/>}
-    {toast && <div className="global-toast"><div className="success-icon"><Icon name="check"/></div><span><strong>{toast}</strong><small>Simulated action completed.</small></span></div>}
+    {toast && <div className="global-toast" role="status"><div className="success-icon"><Icon name="check"/></div><span><strong>{toast}</strong></span></div>}
   </Shell>
 }

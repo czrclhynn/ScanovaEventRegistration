@@ -1,6 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
+.field select, .field textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: 10px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(7, 14, 29, .35);
+  color: white;
+}
+.field select:focus-visible, .field textarea:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+}
+.field select option { background: #131d35; }
+.field textarea { min-height: 100px; resize: vertical; }
+
 @theme {
   --color-midnight: #10182d;
   --color-coral: #f07870;

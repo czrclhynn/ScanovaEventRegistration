@@ -1,5 +1,9 @@
+'use client'
+
 import Link from 'next/link'
-import { getPublicEvents } from '@/lib/events'
+import { useEffect, useState } from 'react'
+import { scanova } from '@/lib/scanova/client'
+import { dateLabel, eventTimeLabel, type ScanovaEvent } from '@/lib/scanova/types'
 
 const statusLabel = {
   open: 'Registration open',
@@ -8,25 +12,18 @@ const statusLabel = {
   archived: 'Archived',
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'Asia/Manila',
-  }).format(new Date(value))
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat('en-PH', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Asia/Manila',
-  }).format(new Date(value))
-}
-
-export default async function EventsPage() {
-  const events = await getPublicEvents()
+export default function EventsPage() {
+  const [events, setEvents] = useState<ScanovaEvent[]>([])
+  const [failure, setFailure] = useState('')
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    const controller = new AbortController()
+    scanova<{ events: ScanovaEvent[] }>('events', undefined, controller.signal)
+      .then(result => setEvents(result.events))
+      .catch(error => { if (!controller.signal.aborted) setFailure(error.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [])
 
   return (
     <main className="events-page">
@@ -38,8 +35,8 @@ export default async function EventsPage() {
         </Link>
         <nav>
           <Link className="active" href="/events">All events</Link>
-          <Link href="/admin/collections/events">Manage events</Link>
-          <Link className="create-event-link" href="/admin/collections/events/create">Create event</Link>
+          <Link href="/?staff=events">Manage events</Link>
+          <Link className="create-event-link" href="/?staff=events&new=1">Create event</Link>
         </nav>
       </header>
 
@@ -49,37 +46,36 @@ export default async function EventsPage() {
         <p>Explore upcoming seminars, workshops, and community gatherings. One registration, one QR, effortless entry.</p>
         <div className="events-utility">
           <span>{events.length} upcoming events</span>
-          <Link href="/admin/collections/events/create">+ Create another event</Link>
+          <Link href="/?staff=events&new=1">+ Create another event</Link>
         </div>
       </section>
 
-      {events.length ? (
+      {loading || failure ? <section className="events-empty glass"><p role={failure ? "alert" : "status"}>{failure || "Loading events…"}</p></section> : events.length ? (
         <section className="events-grid">
           {events.map((event, index) => {
-            const remaining = Math.max(0, event.capacity - event.registrations)
-            const percentage = Math.min(100, Math.round((event.registrations / event.capacity) * 100))
+            const remaining = event.available
+            const percentage = Math.min(100, Math.round((event.confirmed / event.capacity) * 100))
             return (
               <article className={`catalog-event glass ${index === 0 ? 'featured' : ''}`} key={event.id}>
                 <div className="catalog-event-top">
                   <span className={`event-status ${event.status}`}>{statusLabel[event.status]}</span>
                   <span>{remaining} seats left</span>
                 </div>
-                <span className="event-category">{event.category}</span>
-                <h2>{event.title}</h2>
-                <p>{event.summary}</p>
+                <h2>{event.name}</h2>
+                <p>{event.description}</p>
                 <div className="catalog-meta">
-                  <div><small>Date</small><strong>{formatDate(event.startDate)}</strong></div>
-                  <div><small>Time</small><strong>{formatTime(event.startDate)} – {formatTime(event.endDate)}</strong></div>
-                  <div><small>Venue</small><strong>{event.venue}<br/>{event.city}</strong></div>
+                  <div><small>Date</small><strong>{dateLabel(event.date)}</strong></div>
+                  <div><small>Time</small><strong>{eventTimeLabel(event)}</strong></div>
+                  <div><small>Venue</small><strong>{event.venue}</strong></div>
                 </div>
                 <div className="catalog-capacity">
-                  <span><b>{event.registrations}</b> of {event.capacity} seats taken</span>
+                  <span><b>{event.confirmed}</b> of {event.capacity} seats taken</span>
                   <b>{percentage}%</b>
                 </div>
                 <div className="progress"><i style={{ width: `${percentage}%` }}/></div>
                 <div className="catalog-actions">
-                  <Link className="primary" href="/#event">View event</Link>
-                  <Link href={`/admin/collections/events/${event.id}`}>Manage</Link>
+                  <Link className="primary" href={event.status === "open" ? "/?event=" + event.id : "/#event"}>{event.status === "open" ? "Register" : "Event site"}</Link>
+                  <Link href="/?staff=events">Manage</Link>
                 </div>
               </article>
             )
@@ -89,7 +85,7 @@ export default async function EventsPage() {
         <section className="events-empty glass">
           <h2>No events are scheduled yet.</h2>
           <p>Create the first event in the Scanova event manager.</p>
-          <Link className="primary" href="/admin/collections/events/create">Create event</Link>
+          <Link className="primary" href="/?staff=events&new=1">Create event</Link>
         </section>
       )}
     </main>

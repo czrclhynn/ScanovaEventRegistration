@@ -1,0 +1,530 @@
+{
+  "name": "Scanova · Registration Confirmation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scanova-registration-confirmation",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000001",
+      "name": "Registration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "38382fbe-2e64-4abe-968c-beafafd1e6a8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body || typeof body !== 'object' || Array.isArray(body) ||\n    Object.keys(body).length !== 1 || typeof body.deliveryId !== 'string' ||\n    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.deliveryId)) {\n  return [{ json: { valid: false } }];\n}\nreturn [{ json: { valid: true, deliveryId: body.deliveryId } }];"
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000002",
+      "name": "Validate Webhook Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scanova.example.com/api/scanova/automation/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deliveryId: $('Validate Webhook Payload').first().json.deliveryId }) }}",
+        "options": {
+          "timeout": 12000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000003",
+      "name": "Retrieve Ticket Information",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nif (item.json.claimed !== true) return [];\nreturn [item];"
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000004",
+      "name": "Continue Only With Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://scanova.example.com/api/scanova/automation/qr?deliveryId=' + $('Validate Webhook Payload').first().json.deliveryId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-scanova-claim",
+              "value": "={{ $json.claim_token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 12000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "ticket"
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000005",
+      "name": "Obtain QR Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const info = $('Retrieve Ticket Information').first().json;\nconst escape = value => String(value).replace(/[&<>\"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', \"'\":'&#39;' }[c]));\nconst date = new Intl.DateTimeFormat('en-PH', { dateStyle: 'full', timeZone: 'Asia/Manila' }).format(new Date(info.date + 'T00:00:00+08:00'));\nconst formatTime = time => new Intl.DateTimeFormat('en-PH', { timeStyle: 'short', timeZone: 'Asia/Manila' }).format(new Date(info.date + 'T' + time.slice(0, 5) + ':00+08:00'));\nconst time = formatTime(info.start) + ' – ' + formatTime(info.end);\nconst image = (await this.helpers.getBinaryDataBuffer(0, 'ticket')).toString('base64');\nconst fact = (label, value) => '<tr><td width=\"72\" valign=\"top\" style=\"padding:6px 12px 6px 0;font-size:12px;font-weight:bold;color:#52647c;\">' + label + '</td><td style=\"padding:6px 0;font-size:15px;line-height:1.5;color:#182238;overflow-wrap:anywhere;\">' + escape(value) + '</td></tr>';\nconst html = [\n  '<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Scanova QR ticket</title></head>',\n  '<body style=\"margin:0;padding:0;background:#edf1f8;color:#182238;font-family:Arial,Helvetica,sans-serif;\">',\n  '<div style=\"display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;\">Your seat is confirmed. Your check-in QR code is inside.</div>',\n  '<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" bgcolor=\"#edf1f8\"><tr><td align=\"center\" style=\"padding:24px 12px;\">',\n  '<!--[if mso]><table role=\"presentation\" width=\"560\"><tr><td><![endif]-->',\n  '<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"max-width:560px;\">',\n  '<tr><td bgcolor=\"#10182d\" style=\"padding:28px 26px;color:#ffffff;border-radius:16px 16px 0 0;border-top:4px solid #f07870;\">',\n  '<p style=\"margin:0 0 15px;font-size:13px;font-weight:bold;letter-spacing:2.5px;color:#ffb0a8;\">SCANOVA</p>',\n  '<h1 style=\"margin:0;font-size:30px;line-height:1.18;color:#ffffff;\">Your seat is confirmed</h1></td></tr>',\n  '<tr><td bgcolor=\"#ffffff\" style=\"padding:24px 26px;color:#182238;\">',\n  '<p style=\"margin:0 0 10px;font-size:15px;line-height:1.5;\">Hi ' + escape(info.name) + ',</p>',\n  '<p style=\"margin:0 0 16px;font-size:15px;line-height:1.5;\">You’re registered for <strong>' + escape(info.event_name) + '</strong>.</p>',\n  '<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"border-top:1px solid #dde5f0;\">',\n  fact('DATE', date), fact('TIME', time), fact('VENUE', info.venue), '</table></td></tr>',\n  '<tr><td align=\"center\" bgcolor=\"#f6f8fc\" style=\"padding:24px 18px;border-top:1px dashed #c3cde0;border-radius:0 0 16px 16px;\">',\n  '<h2 style=\"margin:0 0 12px;font-size:19px;color:#182238;\">Your check-in QR</h2>',\n  '<img src=\"cid:scanova-ticket\" width=\"224\" height=\"224\" alt=\"Your Scanova check-in QR code\" style=\"display:block;width:224px;max-width:100%;height:auto;margin:0 auto;background:#ffffff;border:1px solid #d6deec;border-radius:10px;\">',\n  '<p style=\"margin:14px 0 0;max-width:300px;font-size:14px;line-height:1.5;color:#465773;\">Show this code at the entrance. You can use your phone or print the attached ticket.</p>',\n  '</td></tr><tr><td align=\"center\" style=\"padding:18px 10px 0;font-size:12px;color:#52647c;\">Scanova · Event registration</td></tr></table>',\n  '<!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>',\n].join('');\nreturn [{ json: {\n  from: 'Scanova <tickets@scanova.example.com>',\n  to: [info.recipient],\n  subject: 'Your Scanova ticket for ' + info.event_name.replace(/[\\r\\n]+/g, ' '),\n  html,\n  text: ['Hi ' + info.name + ',', 'Your seat for ' + info.event_name + ' is confirmed.', date, time, info.venue, 'Show the attached QR code at the event entrance.'].join('\\n'),\n  attachments: [{ filename: 'scanova-ticket.png', content: image, content_type: 'image/png', content_id: 'scanova-ticket' }],\n} }];"
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000006",
+      "name": "Format Confirmation Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        160
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ 'scanova/' + $('Validate Webhook Payload').first().json.deliveryId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 12000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000007",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst status = Number(response.statusCode);\nconst reference = response.body?.id;\nif (status >= 200 && status < 300 && typeof reference === 'string' && reference) {\n  return [{ json: { outcome: 'sent', providerReference: reference } }];\n}\nconst definitive = [400,401,403,404,422].includes(status);\nreturn [{ json: { outcome: definitive ? 'rejected' : 'retry' } }];"
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000008",
+      "name": "Classify Provider Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scanova.example.com/api/scanova/automation/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deliveryId: $('Validate Webhook Payload').first().json.deliveryId, claim: $('Retrieve Ticket Information').first().json.claim_token, outcome: $json.outcome, providerReference: $json.providerReference }) }}",
+        "options": {
+          "timeout": 12000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000009",
+      "name": "Update Email Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        140
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scanova.example.com/api/scanova/automation/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ deliveryId: $('Validate Webhook Payload').first().json.deliveryId, claim: $('Retrieve Ticket Information').first().json.claim_token, outcome: 'retry' }) }}",
+        "options": {
+          "timeout": 12000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000010",
+      "name": "Report Retryable Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        420
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000011",
+      "name": "Retry Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        530
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scanova.example.com/api/scanova/automation/dispatch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000012",
+      "name": "Dispatch Due Deliveries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        530
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "926a3d8e-c2da-4cd9-85fe-fd6793f4aa25",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000013",
+      "name": "Payload Is Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"accepted\": true }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000014",
+      "name": "Accept Registration Notification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"error\": \"Expected only a UUID deliveryId.\" }",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "ad0dbb71-afac-46b9-8c41-000000000015",
+      "name": "Reject Invalid Notification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Registration Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Webhook Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Webhook Payload": {
+      "main": [
+        [
+          {
+            "node": "Payload Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Ticket Information": {
+      "main": [
+        [
+          {
+            "node": "Continue Only With Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Only With Claim": {
+      "main": [
+        [
+          {
+            "node": "Obtain QR Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtain QR Image": {
+      "main": [
+        [
+          {
+            "node": "Format Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Retryable Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Retryable Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Classify Provider Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Retryable Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Provider Outcome": {
+      "main": [
+        [
+          {
+            "node": "Update Email Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Schedule": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Due Deliveries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payload Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Accept Registration Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Invalid Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Registration Notification": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Ticket Information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "timezone": "Asia/Manila"
+  },
+  "tags": []
+}
