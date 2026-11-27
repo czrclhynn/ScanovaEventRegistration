@@ -1,0 +1,10 @@
+{
+  "description": "Register seminar attendees, issue QR tickets and confirmations, and help event staff check in guests and manage attendance from one streamlined system.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
